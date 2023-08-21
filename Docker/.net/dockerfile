@@ -1,0 +1,56 @@
+FROM mcr.microsoft.com/dotnet/sdk:7.0 as builder
+WORKDIR /app
+COPY ./ ./
+RUN dotnet build ./BotApi.sln -c Release
+RUN dotnet publish -c Release -o publishFiles
+
+FROM mcr.microsoft.com/dotnet/sdk:7.0 as migrations
+ARG connection_strings
+ENV ConnectionStrings $connection_strings
+COPY --from=builder /app/publishFiles ./
+RUN export ConnectionStrings__Default=$ConnectionStrings && dotnet ./BotApi.DbMigrator.dll
+
+FROM openjdk:18-alpine as dependency_check
+RUN apk update
+RUN apk add yarn
+RUN apk add openjdk8
+RUN apk add wget tar gzip
+RUN wget https://github.com/jeremylong/DependencyCheck/releases/download/v8.2.1/dependency-check-8.2.1-release.zip \
+    && unzip dependency-check-8.2.1-release.zip\
+    && rm dependency-check-8.2.1-release.zip
+COPY --from=builder /app/publishFiles ./
+WORKDIR /app
+COPY ./ ./
+RUN /dependency-check/bin/dependency-check.sh --scan . --out ./report --format "JSON"
+
+FROM mcr.microsoft.com/dotnet/sdk:7.0 as sonarqube
+WORKDIR /app
+COPY ./ ./
+RUN apt-get update && apt-get dist-upgrade -y && apt-get install -y openjdk-11-jre
+RUN dotnet tool install --global dotnet-sonarscanner
+RUN dotnet tool install --global dotnet-reportgenerator-globaltool --version 4.8.12
+ENV PATH="${PATH}:/root/.dotnet/tools"
+ARG dsonar_project_key
+ARG dsonar_login
+ARG dsonar_host
+ENV DSONAR_PROJECT_KEY $dsonar_project_key
+ENV DSONAR_LOGIN $dsonar_login
+ENV DSONAR_HOST $dsonar_host
+COPY --from=dependency_check ./app/report/dependency-check-report.json ./report/
+RUN dotnet sonarscanner begin /k:${DSONAR_PROJECT_KEY} \
+    /d:sonar.host.url=${DSONAR_HOST} \
+    /d:sonar.login=${DSONAR_LOGIN} \
+    /d:sonar.dependencyCheck.jsonReportPath=./report/dependency-check-report.json
+RUN dotnet build ./BotApi.sln -c Release
+RUN dotnet publish -c Release -o publishFiles
+RUN dotnet sonarscanner end /d:sonar.login="$DSONAR_LOGIN"
+
+FROM mcr.microsoft.com/dotnet/aspnet:7.0-alpine3.16-amd64 as app
+RUN apk --no-cache add ca-certificates
+RUN apk add --no-cache icu-libs
+ENV DOTNET_SYSTEM_GLOBALIZATION_INVARIANT=false
+ENV DOTNET_URLS=http://+:5000
+WORKDIR /app
+COPY --from=builder /app/publishFiles ./
+EXPOSE 5000
+CMD dotnet ./BotApi.Web.dll
