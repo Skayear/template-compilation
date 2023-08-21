@@ -1,0 +1,67 @@
+FROM node:16.13.2-alpine as dependencies
+WORKDIR /app
+COPY package*.json ./
+COPY yarn.lock /app/
+COPY ./.env ./.env
+RUN yarn install
+
+FROM node:16.13.2-alpine as build
+WORKDIR /app
+COPY . /app/
+COPY --from=dependencies /app/node_modules /app/node_modules
+RUN yarn build
+
+FROM node:16.20.0-alpine as lint
+WORKDIR /app
+COPY . /app/
+COPY --from=dependencies /app/node_modules /app/node_modules
+RUN yarn run lint
+
+FROM openjdk:18-alpine as dependency_check
+RUN apk update
+RUN apk add yarn
+RUN apk add openjdk8
+RUN apk add wget tar gzip
+RUN wget https://github.com/jeremylong/DependencyCheck/releases/download/v8.2.1/dependency-check-8.2.1-release.zip \
+    && unzip dependency-check-8.2.1-release.zip\
+    && rm dependency-check-8.2.1-release.zip
+COPY --from=dependencies /app/node_modules /app/node_modules
+WORKDIR /app
+COPY ./ ./
+RUN /dependency-check/bin/dependency-check.sh --scan . --out ./report --format "JSON"
+
+FROM sonarsource/sonar-scanner-cli as sonarqube
+WORKDIR /app
+COPY ./ ./
+COPY --from=dependency_check ./app/report/dependency-check-report.json ./report/
+ARG dsonar_project_key
+ARG dsonar_login
+ARG dsonar_host
+ENV DSONAR_PROJECT_KEY $dsonar_project_key
+ENV DSONAR_LOGIN $dsonar_login
+ENV DSONAR_HOST $dsonar_host 
+RUN sonar-scanner \
+  -Dsonar.projectKey=${DSONAR_PROJECT_KEY} \
+  -Dsonar.sources=. \
+  -Dsonar.host.url=${DSONAR_HOST} \
+  -Dsonar.login=${DSONAR_LOGIN} \
+  -Dsonar.dependencyCheck.jsonReportPath=./report/dependency-check-report.json
+
+FROM node:16.13.2-alpine as test
+WORKDIR /app
+COPY . /app/
+COPY --from=build /app/ /app/
+RUN yarn test
+
+FROM node:16.13.2-alpine as migrations
+WORKDIR /app
+COPY . /app/
+COPY --from=build /app/ /app/
+RUN yarn migration:run
+
+FROM node:16.13.2-alpine as app
+WORKDIR /app
+ENV NODE_OPTIONS=--max_old_space_size=2048
+COPY --from=build /app/ /app/
+EXPOSE 80 443
+CMD ["node","dist/main"]
