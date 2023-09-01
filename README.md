@@ -1,11 +1,16 @@
 # Template Compilation
 
 ## AWS
-    - Modules
+    * Modules
         - S3
+            - /Terraform/AWS/Modules/S3    
         - Cloudfront
-    - Stacks
+            - /Terraform/AWS/Modules/Cloudfront
+        - AWS WAF
+            - /Terraform/AWS/Modules/WAF
+    * Stacks
         - Cloudfront + S3
+            - /Terraform/AWS/Stacks/Cloudfront-S3 
 ## Azure
 
 ## Docker
