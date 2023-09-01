@@ -2,38 +2,38 @@
 
 ## AWS
 
-    * Modules
+    1. Modules
         * S3
             * /Terraform/AWS/Modules/S3    
         * Cloudfront
             * /Terraform/AWS/Modules/Cloudfront
         * AWS WAF
             * /Terraform/AWS/Modules/WAF
-    * Stacks
+    2. Stacks
         * Cloudfront + S3
             * /Terraform/AWS/Stacks/Cloudfront-S3 
 ## Azure
 
 ## Docker
 
-    * Node
+    1. Node
 
-    * Dotnet
+    2. Dotnet
 
-    * PHP
+    3. PHP
 
-    * Angular
+    4. Angular
 
 ## Pipelines
 
 ### Azure DevOps
 
-    * Flutter Pipeline
+    1. Flutter Pipeline
 
 ### Gitlab CI
 
-    * Basic CI/CD AWS ECR
+    1. Basic CI/CD AWS ECR
 
 ### Github Actions
 
-    * Basic CI/CD DockerHub
+    1. Basic CI/CD DockerHub
